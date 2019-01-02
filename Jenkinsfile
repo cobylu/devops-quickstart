@@ -3,66 +3,97 @@ pipeline {
   stages {
     stage("Install ADM and FitNesse for Appian") {
       steps {
-        sh "rm -rf adm f4a"
-        shNoTrace "curl -H X-JFrog-Art-Api:$ARTIFACTORYAPIKEY -O $ARTIFACTORYURL/appian-devops/adm.zip"
-        sh "unzip adm.zip -d adm"
-        sh "unzip adm/appian-adm-import*.zip -d adm/appian-import-client"
-        setProperty("adm/appian-import-client/metrics.properties", "pipelineUsage", "true")
-        sh "unzip adm/appian-adm-versioning*.zip -d adm/appian-version-client"
-        setProperty("adm/appian-version-client/metrics.properties", "pipelineUsage", "true")
-        shNoTrace "curl -H X-JFrog-Art-Api:$ARTIFACTORYAPIKEY -O $ARTIFACTORYURL/appian-devops/f4a.zip"
-        sh "unzip f4a.zip -d f4a"
-        setProperty("f4a/FitNesseForAppian/configs/metrics.properties", "pipeline.usage", "true")
-        sh "cp -a devops/f4a/test_suites/. f4a/FitNesseForAppian/FitNesseRoot/FitNesseForAppian/Examples/"
-        sh "cp devops/f4a/users.properties f4a/FitNesseForAppian/configs/users.properties"
+        script {
+          def jenkinsUtils = load "groovy/JenkinsUtils.groovy"
+          sh "rm -rf adm f4a"
+          jenkinsUtils.shNoTrace("curl -H X-JFrog-Art-Api:$ARTIFACTORYAPIKEY -O $ARTIFACTORYURL/appian-devops/adm.zip")
+          sh "unzip adm.zip -d adm"
+          sh "unzip adm/appian-adm-import*.zip -d adm/appian-import-client"
+          jenkinsUtils.setProperty("adm/appian-import-client/metrics.properties", "pipelineUsage", "true")
+          sh "unzip adm/appian-adm-versioning*.zip -d adm/appian-version-client"
+          jenkinsUtils.setProperty("adm/appian-version-client/metrics.properties", "pipelineUsage", "true")
+          jenkinsUtils.shNoTrace("curl -H X-JFrog-Art-Api:$ARTIFACTORYAPIKEY -O $ARTIFACTORYURL/appian-devops/f4a.zip")
+          sh "unzip f4a.zip -d f4a"
+          jenkinsUtils.setProperty("f4a/FitNesseForAppian/configs/metrics.properties", "pipeline.usage", "true")
+          sh "cp -a devops/f4a/test_suites/. f4a/FitNesseForAppian/FitNesseRoot/FitNesseForAppian/Examples/"
+          sh "cp devops/f4a/users.properties f4a/FitNesseForAppian/configs/users.properties"
+        }
       }
     }
     stage("Build Application Package from Repo") {
       steps {
-        buildPackage("version-manager.properties")
+        script {
+          def jenkinsUtils = load "groovy/JenkinsUtils.groovy"
+          jenkinsUtils.buildPackage("version-manager.properties")
+        }
       }
     }
     stage("Deploy to Test") {
       steps {
-        importPackage("import-manager.test.properties", "${APPLICATIONNAME}.test.properties")
+        script {
+          def jenkinsUtils = load "groovy/JenkinsUtils.groovy"
+          jenkinsUtils.importPackage("import-manager.test.properties", "${APPLICATIONNAME}.test.properties")
+        }
       }
     }
     stage("Tag Successful Import into Test") {
       steps {
-        tagSuccessfulImport("TEST")
+        script {
+          def githubUtils = load "groovy/GitHubUtils.groovy"
+          githubUtils.tagSuccessfulImport("TEST")
+        }
       }
     }
     stage("Run Integration Tests") {
       steps {
-        runTests("fitnesse-automation.integrate.properties")
+        script {
+          def jenkinsUtils = load "groovy/JenkinsUtils.groovy"
+          jenkinsUtils.runTests("fitnesse-automation.integrate.properties")
+        }
       }
       post {
         always { dir("f4a/FitNesseForAppian"){ junit "fitnesse-results.xml" } }
-        failure { archiveArtifacts artifacts: retrieveLogs("fitnesse-automation.integrate.properties"), fingerprint: true }
+        failure {
+          script { def jenkinsUtils = load "groovy/JenkinsUtils.groovy" archiveArtifacts artifacts: jenkinsUtils.retrieveLogs("fitnesse-automation.integrate.properties"), fingerprint: true }
+        }
       }
     }
     stage("Deploy to Staging") {
       steps {
-        importPackage("import-manager.stag.properties", "${APPLICATIONNAME}.stag.properties")
+        script {
+          def jenkinsUtils = load "groovy/JenkinsUtils.groovy"
+          jenkinsUtils.importPackage("import-manager.stag.properties", "${APPLICATIONNAME}.stag.properties")
+        }
       }
     }
     stage("Tag Successful Import into Staging") {
       steps {
-        tagSuccessfulImport("STAG")
+        script {
+          def githubUtils = load "groovy/GitHubUtils.groovy"
+          githubUtils.tagSuccessfulImport("STAG")
+        }
       }
     }
     stage("Run Acceptance Tests") {
       steps {
-        runTests("fitnesse-automation.acceptance.properties")
+        script {
+          def jenkinsUtils = load "groovy/JenkinsUtils.groovy"
+          jenkinsUtils.runTests("fitnesse-automation.acceptance.properties")
+        }
       }
       post {
         always { dir("f4a/FitNesseForAppian"){ junit "fitnesse-results.xml" } }
-        failure { archiveArtifacts artifacts: retrieveLogs("fitnesse-automation.acceptance.properties"), fingerprint: true }
+        failure {
+          script { def jenkinsUtils = load "groovy/JenkinsUtils.groovy" archiveArtifacts artifacts: retrieveLogs("fitnesse-automation.acceptance.properties"), fingerprint: true }
+        }
       }
     }
     stage("Create Application Release") {
       steps {
-        releaseApplication("RELEASE", "${APPLICATIONNAME}.properties")
+        script {
+          def githubUtils = load "groovy/GitHubUtils.groovy"
+          githubUtils.releaseApplication("RELEASE", "${APPLICATIONNAME}.properties")
+        }
       }
     }
     stage("Promotion Decision") {
@@ -72,12 +103,18 @@ pipeline {
     }
     stage("Deploy to Production") {
       steps {
-        importPackage("import-manager.prod.properties", "${APPLICATIONNAME}.prod.properties")
+        script {
+          def jenkinsUtils = load "groovy/JenkinsUtils.groovy"
+          jenkinsUtils.importPackage("import-manager.prod.properties", "${APPLICATIONNAME}.prod.properties")
+        }
       }
     }
     stage("Tag Successful Import into Production") {
       steps {
-        tagSuccessfulImport("PROD")
+        script {
+          def githubUtils = load "groovy/GitHubUtils.groovy"
+          githubUtils.tagSuccessfulImport("PROD")
+        }
       }
     }
   }
